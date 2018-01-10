@@ -3,7 +3,7 @@
  *	For use with GEN 1 Meter
  *  Author: SmartThings
  *  Modified by: inkedanchor
- *  Date:
+ *  Date: 01/10/18
  */
  
 metadata {
@@ -18,6 +18,7 @@ metadata {
         attribute "highPower", "string"
         attribute "timeString", "string"
         attribute "batteryStatus", "string"
+        attribute "resetDate", "string"
         
 		command "reset"
 
@@ -62,10 +63,13 @@ metadata {
         valueTile("highPower", "device.highPower", decoration: "flat", width:2, height:2) {
 			state "default", label: 'PEAK\n${currentValue}W'
 		}
+        valueTile("resetDate","device.resetDate", decoration: "flat", width:2, height:2) {
+        	state "default", label: 'Last Reset\n${currentValue}'
+        }
         htmlTile(name:"graphHTML", action:"getGraphHTML",refreshInterval:1, width:6, height:4, whitelist:["www.gstatic.com"])
 
 		main (["powerMain","power"])
-		details(["powerMain","power","energy","energyCost","highPower","reset","batteryStatus","graphHTML","refresh"])
+		details(["powerMain","power","energy","energyCost","batteryStatus","resetDate","highPower","graphHTML","reset","refresh"])
 	        }
                 preferences {
                      input "kWhCost", "string", title: "\$/kWh (0.16)", defaultValue: "0.16" as String
@@ -97,7 +101,10 @@ def zwaveEvent(physicalgraph.zwave.commands.meterv1.MeterReport cmd) {
     if(state.eventData == null){
 	    state.eventData = [:]
         }
-    
+    if(state.eventID == null){
+    	state.eventID = 0
+        }
+        
 	if (cmd.scale == 0) {	
         newValue = cmd.scaledMeterValue
         [name: "energy", value: cmd.scaledMeterValue, unit: "kWh"]
@@ -132,15 +139,15 @@ def zwaveEvent(physicalgraph.zwave.commands.meterv1.MeterReport cmd) {
        	}
 //Power trending data capture 
 		newTrendValue = cmd.scaledMeterValue
-        sendEvent(name: "power", value: Math.round(cmd.scaledMeterValue), unit: "W")
+        sendEvent(name: "power", value: Math.round(cmd.scaledMeterValue), unit: "W", displayed: true)
 		[name: "power", value: Math.round(cmd.scaledMeterValue), unit: "W"]
         def eventData = [
-        	"time": timeString.format("HH:MM", location.timeZone),
-            "energy": newTrendValue
+        	"'${timeString.format("HH:mm", location.timeZone)}'",
+            newTrendValue
         ]
         log.debug "New Power Data Added: ${eventData}"
-        state.eventData.put("${timeString}",eventData)
-        log.debug "state.eventData is ${state.eventData}"
+        state.eventID = state.eventID + 1
+        state.eventData.put(state.eventID,eventData)
     }
 }
 
@@ -181,17 +188,21 @@ def refresh() {
 		zwave.meterV2.meterGet(scale: 0).format(),
 		zwave.meterV2.meterGet(scale: 2).format()
 	])
+    getGraphHTML()
 }
 
 def reset() {
-    def resetDate = new Date()
+    def resetDate = new Date().format("MM-dd-yy h:mm a", location.timeZone)
+    sendEvent(name:"resetDate", value: resetDate, displayed: false)
 	sendEvent(name:"energyCost", value: "Cost\n--", unit: "")
     state.highPower = newPowerValue
     state.eventData = [:]
+    state.eventID = 0
     return [
             zwave.meterV2.meterReset().format(),
             zwave.meterV2.meterGet(scale: 0).format()
    ]
+   refresh()
 }
 
 def configure() {
@@ -207,31 +218,11 @@ def configure() {
 	cmd
 }
 
-String getDataString(Integer seriesIndex) {
-	def dataString = ""
-	def dataTable = []
-	switch (seriesIndex) {
-		case 1:
-			dataTable = state.dataMapList
-			break
-		case 2:
-			dataTable = state.powerTable
-			break
-	}
-	dataTable.each() {
-		def dataArray = [[it[0],it[1],0],null,null,null,null]
-		dataArray[seriesIndex] = it[2]
-		dataString += dataArray.toString() + ","
-	}
-	return dataString
-}
-
-def getStartTime() {
-	def startTime = 24
-	return startTime
-}
-
 def getGraphHTML() {
+
+	def graphEventData = state.eventData
+    def graphData = "${state.eventData.values()}"
+    log.debug "Graph Data is ${graphData}"
 	def html = """
     	<!DOCTYPE html>
 			<html>
@@ -240,19 +231,31 @@ def getGraphHTML() {
 					<script type="text/javascript">
 						google.charts.load('current', {packages: ['corechart']});
 						google.charts.setOnLoadCallback(drawChart);
-						function drawGraph() {
+						function drawChart() {
 							var data = new google.visualization.DataTable();
-							data.addColumn('timeofday', 'time');
-						    data.addColumn('number', 'Power');
-							data.addRows([
-								${eventData}
-							]);
+							data.addColumn('string', 'Time');
+							data.addColumn('number', 'Power');
+							data.addRows(${graphData});
 							var options = {
-								legend: {
+                            	height: 600,
+								series: {
+                                	0: {targetAxisIndex: 1, color: '#00a0dc'}
+                                    },
+                                hAxis: {
+                                	title: 'Time'
+                                    },
+                                vAxis: {
+                                	title: 'Power'
+                                    },
+                                legend: {
 									position: 'none'
+								},
+								chartArea: {
+									width: '85%',
+									height: '80%'
 								}
 							};
-							var chart = new google.visualization.BarChart(document.getElementById('chart_div'));
+							var chart = new google.visualization.AreaChart(document.getElementById('chart_div'));
 							chart.draw(data, options);
 						}
 					</script>
