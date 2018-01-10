@@ -3,7 +3,7 @@
  *	For use with GEN 1 Meter
  *  Author: SmartThings
  *  Modified by: inkedanchor
- *  Date: 01/10/18
+ *  Date:
  */
  
 metadata {
@@ -52,7 +52,7 @@ metadata {
             state "default", label: '${currentValue}', icon: "st.quirky.porkfolio.quirky-porkfolio-side"
 		}
         standardTile("batteryStatus", "device.batteryStatus", decoration: "flat", width:2, height:2) {
-            state "default", label: '${currentValue}'
+            state "default", label: '${currentValue}', icon: "st.switches.switch.on"
 		}
 		standardTile("reset", "device.energy", inactiveLabel: false, decoration: "flat", width:2, height:2) {
 			state "default", label:'reset', action:"reset", icon: "st.quirky.spotter.quirky-spotter-plugged"
@@ -63,13 +63,13 @@ metadata {
         valueTile("highPower", "device.highPower", decoration: "flat", width:2, height:2) {
 			state "default", label: 'PEAK\n${currentValue}W'
 		}
-        valueTile("resetDate","device.resetDate", decoration: "flat", width:2, height:2) {
+        valueTile("resetDate","device.resetDate", decoration: "flat", width:4, height:2) {
         	state "default", label: 'Last Reset\n${currentValue}'
         }
         htmlTile(name:"graphHTML", action:"getGraphHTML",refreshInterval:1, width:6, height:4, whitelist:["www.gstatic.com"])
 
 		main (["powerMain","power"])
-		details(["powerMain","power","energy","energyCost","batteryStatus","resetDate","highPower","graphHTML","reset","refresh"])
+		details(["powerMain","power","energy","energyCost","resetDate","highPower","graphHTML","batteryStatus","reset","refresh"])
 	        }
                 preferences {
                      input "kWhCost", "string", title: "\$/kWh (0.16)", defaultValue: "0.16" as String
@@ -102,7 +102,7 @@ def zwaveEvent(physicalgraph.zwave.commands.meterv1.MeterReport cmd) {
 	    state.eventData = [:]
         }
     if(state.eventID == null){
-    	state.eventID = 0
+	    state.eventID = 0
         }
         
 	if (cmd.scale == 0) {	
@@ -114,15 +114,6 @@ def zwaveEvent(physicalgraph.zwave.commands.meterv1.MeterReport cmd) {
         BigDecimal costDecimal = newValue * ( kWhCost as BigDecimal)
         def costDisplay = String.format("%5.2f",costDecimal)
         sendEvent(name: "energyCost", value: "\$${costDisplay}", unit: "", displayed: false)
-/*Energy Trending
-        log.debug "state.eventData is ${state.eventData}"
-        def eventData = [
-        	"time": timeString.format("HH:MM", location.timeZone),
-            "energy": newValue
-        ]
-        log.debug "eventData is ${eventData}"
-        state.eventData.put("${timeString}",eventData)
-        log.debug "state.eventData is ${state.eventData}"*/
     }
     else if (cmd.scale == 1) {
         [name: "energy", value: cmd.scaledMeterValue, unit: "kVAh"]
@@ -146,8 +137,14 @@ def zwaveEvent(physicalgraph.zwave.commands.meterv1.MeterReport cmd) {
             newTrendValue
         ]
         log.debug "New Power Data Added: ${eventData}"
+        if(state.eventID == 25){
+        	state.eventID = 1
+        }
         state.eventID = state.eventID + 1
+        log.debug "EventID is ${state.eventID}"
         state.eventData.put(state.eventID,eventData)
+        sendEvent(name:"state.eventData", value:state.eventData.sort {it.key}, displayed: false)
+        log.debug "eventData is ${state.eventData}"
     }
 }
 
@@ -193,7 +190,7 @@ def refresh() {
 
 def reset() {
     def resetDate = new Date().format("MM-dd-yy h:mm a", location.timeZone)
-    sendEvent(name:"resetDate", value: resetDate, displayed: false)
+    sendEvent(name:"resetDate", value: resetDate, textDescription: "Data was reset on ${resetDate}", displayed: true)
 	sendEvent(name:"energyCost", value: "Cost\n--", unit: "")
     state.highPower = newPowerValue
     state.eventData = [:]
@@ -222,7 +219,7 @@ def getGraphHTML() {
 
 	def graphEventData = state.eventData
     def graphData = "${state.eventData.values()}"
-    log.debug "Graph Data is ${graphData}"
+    
 	def html = """
     	<!DOCTYPE html>
 			<html>
