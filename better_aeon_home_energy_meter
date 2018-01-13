@@ -2,12 +2,12 @@
  *  Better Aeon Home Energy Meter
  *	For use with GEN 1 Meter
  *  Author: SmartThings
- *  Modified by: inkedanchor
+ *  Modified by: DataN3rd
  *  Date:
  */
  
 metadata {
-	definition (name: "Better Aeon Home Energy Meter", namespace: "inkedanchor", author: "inkedanchor") {
+	definition (name: "Better Aeon Home Energy Meter", namespace: "DataN3rd", author: "DataN3rd") {
 		capability "Energy Meter"
 		capability "Power Meter"
 		capability "Configuration"
