@@ -8,7 +8,7 @@ import groovy.json.JsonOutput
  *
  */
 metadata {
-    definition (name: "Better Arrival Sensor", namespace: "inkedanchor", author: "inkedanchor") {
+    definition (name: "Better Arrival Sensor", namespace: "DataN3rd", author: "DataN3rd") {
         capability "Tone"
         capability "Actuator"
         capability "Presence Sensor"
